@@ -1,6 +1,6 @@
 import { useId, useMemo, useRef, useState } from "react";
-import { jsPDF } from "jspdf";
 import { CircleHelp } from "lucide-react";
+import { jsPDF } from "jspdf";
 import {
   calculate, defaultInputs, nonnegative, normalizeInputs, validationError,
   type DemandUnit, type Destination, type Inputs, type TripType,
@@ -10,32 +10,32 @@ const CRBT_LOGO_PATH = "/crbt-logo.png";
 const format = new Intl.NumberFormat("es-MX", { maximumFractionDigits: 1 });
 const format2 = new Intl.NumberFormat("es-MX", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
-type HelpContent = { description: string; example: string };
+type HelpContent = { description: string; common: string; recommended?: string };
 
 const help = {
-  shiftHours: { description: "Duracion completa de un turno, incluidos descansos y pausas.", example: "Un turno de 06:00 a 14:00 dura 8 h." },
-  effectiveHours: { description: "Horas disponibles para completar viajes en cada turno, descontando pausas y otras actividades.", example: "En un turno de 8 h con 48 min no productivos quedan 7.2 h efectivas." },
-  shifts: { description: "Cantidad de turnos iguales que opera la planta por dia. Se usa para demanda diaria y recarga.", example: "Dos turnos de 8 h significan 16 h de operacion programada." },
-  availability: { description: "Porcentaje de tiempo en que cada AMR esta operativo por causas mecanicas o tecnicas; la carga de bateria se calcula aparte.", example: "90% significa 54 min disponibles por cada hora programada." },
-  batteryHours: { description: "Autonomia de trabajo del AMR antes de necesitar una recarga.", example: "8 h permiten cubrir un turno de 7.2 h efectivas sin carga durante el turno." },
-  chargeHours: { description: "Tiempo necesario para recargar un AMR. Afecta la disponibilidad y las estaciones de carga.", example: "1.5 h de carga pueden aprovecharse fuera del turno si hay suficiente ventana libre." },
-  robotsPerCharger: { description: "Regla minima de capacidad de carga: un cargador por este numero de AMR. El calculo tambien revisa el tiempo disponible.", example: "Con 4 AMR por cargador, una flota de 8 requiere al menos 2 cargadores." },
-  loadedSpeed: { description: "Velocidad media del AMR durante el trayecto de ida con carga.", example: "100 m a 0.8 m/s toman 125 s." },
-  emptySpeed: { description: "Velocidad media durante el retorno sin carga. Solo se aplica a viajes de ida y vuelta.", example: "100 m a 1.2 m/s toman aproximadamente 83 s." },
-  liftTime: { description: "Segundos por cada levantamiento registrado en un destino.", example: "4 levantamientos de 10 s agregan 40 s al ciclo." },
-  turnTime: { description: "Segundos adicionales por cada giro registrado en un destino.", example: "6 giros de 4 s agregan 24 s al ciclo." },
-  redundancyFactor: { description: "Multiplica la carga de trabajo para reservar capacidad operativa adicional, como en el Excel.", example: "1.20 agrega 20% sobre los AMR calculados antes del redondeo." },
-  trafficPerRobot: { description: "Porcentaje de demora del desplazamiento por cada AMR adicional en la flota compartida.", example: "Con 4 AMR y 1%, los trayectos tardan 3% mas." },
-  name: { description: "Nombre que identifica este flujo en el desglose, la configuracion y el reporte.", example: "Linea de ensamble A." },
-  demandUnit: { description: "Selecciona la unidad en que conoces la demanda. Al cambiarla, el valor se convierte para mantener el flujo.", example: "120 viajes por turno de 8 h efectivas equivalen a 15 viajes por hora." },
-  demandShift: { description: "Numero de viajes que debe atender este destino durante cada turno. Se divide entre las horas efectivas.", example: "120 viajes en 8 h efectivas requieren 15 viajes/h." },
-  demandHour: { description: "Flujo requerido de este destino por hora efectiva. Permanece fijo al cambiar la duracion efectiva del turno.", example: "15 viajes/h durante 8 h efectivas son 120 viajes por turno." },
-  tripType: { description: "Ida y vuelta incluye el regreso vacio; solo ida cuenta unicamente el trayecto de ida.", example: "100 m de ida y 100 m de retorno forman un viaje redondo de 200 m." },
-  loadedDistance: { description: "Distancia recorrida con carga desde el origen hasta este destino.", example: "Del almacen a la linea hay 100 m de ida." },
-  emptyDistance: { description: "Distancia de retorno sin carga para este destino.", example: "Si el regreso usa otro pasillo de 90 m, ingresa 90 m." },
-  liftsPerTrip: { description: "Numero promedio de maniobras de elevacion en cada viaje a este destino.", example: "4 levantamientos a 10 s agregan 40 s." },
-  turnsPerTrip: { description: "Numero promedio de giros o maniobras de esquina por viaje.", example: "6 giros a 4 s agregan 24 s." },
-  bufferTime: { description: "Espera y margen adicional por viaje por peatones, equipo en movimiento u otras pausas.", example: "Ingresa 70 s si cada viaje acumula ese tiempo de espera." },
+  shiftHours: { description: "Duracion completa de un turno, incluidos descansos y pausas.", common: "8 a 12 h por turno.", recommended: "Usa 8 h." },
+  effectiveHours: { description: "Tiempo realmente disponible para completar viajes, despues de descontar descansos, reuniones y pausas planeadas.", common: "80% a 90% de la duracion del turno.", recommended: "Usa 7.2 h para un turno de 8 h." },
+  shifts: { description: "Cantidad de turnos iguales que opera la planta cada dia. Se utiliza para revisar demanda diaria y ventanas de carga.", common: "1 a 3 turnos por dia.", recommended: "Usa 1 turno." },
+  availability: { description: "Porcentaje de tiempo en que cada AMR puede operar, considerando mantenimiento y fallas tecnicas; la bateria se calcula por separado.", common: "85% a 95%.", recommended: "Usa 90%." },
+  batteryHours: { description: "Horas de operacion disponibles antes de que el AMR necesite recarga.", common: "6 a 10 h, segun carga y recorrido.", recommended: "Usa 8 h." },
+  chargeHours: { description: "Tiempo necesario para recuperar la carga de la bateria. Influye en la cantidad de cargadores y en la disponibilidad de la flota.", common: "1 a 2.5 h.", recommended: "Usa 1.5 h." },
+  robotsPerCharger: { description: "Cantidad maxima de AMR atendidos por un cargador cuando las ventanas de carga pueden compartirse.", common: "3 a 5 AMR por cargador.", recommended: "Usa 4 AMR por cargador." },
+  loadedSpeed: { description: "Velocidad media real del AMR durante el recorrido con carga; no es la velocidad maxima del fabricante.", common: "0.4 a 0.8 m/s en planta.", recommended: "Usa 0.5 m/s." },
+  emptySpeed: { description: "Velocidad media durante el retorno sin carga. Solo interviene en viajes de ida y vuelta.", common: "0.5 a 1.0 m/s.", recommended: "Usa 0.6 m/s." },
+  liftTime: { description: "Tiempo promedio de una maniobra de toma o entrega que requiera elevacion.", common: "8 a 20 s por levantamiento.", recommended: "Usa 10 s." },
+  turnTime: { description: "Penalizacion de tiempo aplicada por cada giro para representar desaceleracion, orientacion y recuperacion de velocidad.", common: "2 a 6 s por giro.", recommended: "Usa 4 s." },
+  redundancyFactor: { description: "Reserva capacidad adicional para absorber variaciones de demanda, pequenas demoras y diferencias entre el ciclo ideal y la operacion real.", common: "1.10 a 1.25, equivalente a 10% a 25% de reserva.", recommended: "Usa 1.20." },
+  trafficPerRobot: { description: "Aumento estimado del tiempo de desplazamiento por cada AMR adicional que comparte pasillos y cruces.", common: "0.5% a 2% por AMR adicional.", recommended: "Usa 1%." },
+  name: { description: "Nombre corto para identificar este flujo en resultados, configuraciones y reportes.", common: "Area, linea o proceso atendido, por ejemplo Linea A o Almacen 1." },
+  demandUnit: { description: "Define si la necesidad de transporte se conoce por turno o como una cadencia por hora efectiva.", common: "Viajes por turno para planes de produccion; viajes por hora para procesos continuos." },
+  demandShift: { description: "Cantidad total de viajes que este destino debe recibir durante cada turno.", common: "Depende del consumo o produccion real del punto de entrega. Consulta el plan del proceso." },
+  demandHour: { description: "Cadencia requerida durante cada hora efectiva de operacion.", common: "Depende de la frecuencia real con la que el punto solicita o libera material." },
+  tripType: { description: "Ida y vuelta incluye el regreso vacio; solo ida termina el ciclo al entregar la carga.", common: "Ida y vuelta cuando el AMR devuelve un contenedor o regresa al origen; solo ida cuando recibe otra mision despues de entregar." },
+  loadedDistance: { description: "Longitud real de la ruta recorrida con carga, siguiendo pasillos y no una linea recta.", common: "Mide la ruta desde el punto de recoleccion hasta este punto de entrega." },
+  emptyDistance: { description: "Longitud de la ruta de retorno sin carga o con el contenedor vacio. Puede ser diferente a la distancia de ida.", common: "Mide la ruta de regreso que realmente seguira el robot." },
+  liftsPerTrip: { description: "Cantidad promedio de maniobras de elevacion realizadas durante un viaje completo.", common: "Cuenta las maniobras reales de toma, transferencia y entrega del material." },
+  turnsPerTrip: { description: "Cantidad de giros relevantes donde el AMR debe reducir velocidad para completar el recorrido.", common: "Cuenta las esquinas o cambios de direccion importantes de la ruta." },
+  bufferTime: { description: "Tiempo adicional por viaje para esperas, peatones, puertas, confirmaciones o equipos que bloquean temporalmente la ruta.", common: "Cronometra un recorrido normal y suma las esperas que no estan incluidas en el desplazamiento." },
 } satisfies Record<string, HelpContent>;
 
 function HelpTip({ title, content }: { title: string; content: HelpContent }) {
@@ -49,7 +49,8 @@ function HelpTip({ title, content }: { title: string; content: HelpContent }) {
       <span id={id} className="help-popover" role="tooltip">
         <strong>{title}</strong>
         <span>{content.description}</span>
-        <em>Ejemplo: {content.example}</em>
+        <span><b>Valores comunes:</b> {content.common}</span>
+        {content.recommended && <em><b>Si no tienes el dato:</b> {content.recommended}</em>}
       </span>
     </span>
   );
@@ -288,25 +289,9 @@ export default function App() {
   };
 
   return (
-    <main className="page">
-      <header className="app-header">
-        <img src={CRBT_LOGO_PATH} alt="CRBT Robots Moviles" />
-        <div className="header-copy">
-          <p className="eyebrow">Planeacion de flota</p>
-          <h1>Simulador de cantidad de AMR requeridos</h1>
-        </div>
-        <input ref={configFileRef} accept="application/json,.json" className="hidden-file" type="file"
-          onChange={(event) => void importConfiguration(event.target.files?.[0])} />
-        <div className="report-actions">
-          <button type="button" onClick={exportConfiguration}>Descargar configuracion</button>
-          <button type="button" onClick={() => void downloadPdfReport()} disabled={!results}>Descargar reporte</button>
-          <button type="button" onClick={() => configFileRef.current?.click()}>Importar configuracion</button>
-        </div>
-      </header>
-      {importStatus && <p className="import-status" role="status">{importStatus}</p>}
-
+    <main className="fleet-estimator page">
       <div className="simulator">
-        <div className="configuration">
+        <div className="configuration" id="parametros">
           <section className="form-section">
             <div className="section-heading"><h2>Jornada y flota</h2></div>
             <div className="form-grid">
@@ -330,6 +315,18 @@ export default function App() {
               <NumberField label="Demora por AMR adicional" content={help.trafficPerRobot} value={inputs.trafficPerRobot} unit="%" step={0.1} onChange={(value) => update("trafficPerRobot", value)} />
             </div>
             <p className="field-note">El trafico aumenta el tiempo de viaje con la flota total. Los tiempos de servicio no cambian.</p>
+          </section>
+          <section className="destinations-guide" aria-labelledby="destinations-guide-title">
+            <div>
+              <p className="eyebrow">Antes de agregar destinos</p>
+              <h2 id="destinations-guide-title">Registra cada recorrido que el robot debe atender</h2>
+              <p>Un destino representa un flujo entre un punto de recoleccion y un punto de entrega. Usa datos del proceso real para que la estimacion sea util.</p>
+            </div>
+            <ol>
+              <li><b>Un solo punto de entrega:</b> crea un destino e indica los viajes requeridos, la distancia de ida y las maniobras de esa ruta.</li>
+              <li><b>Varios puntos de entrega:</b> agrega un destino por cada punto. Cada uno puede tener demanda, distancia y tiempos diferentes.</li>
+              <li><b>Regreso de contenedor vacio:</b> selecciona <b>Ida y vuelta</b> e indica la distancia de retorno. Usa <b>Solo ida</b> cuando la mision termina al entregar.</li>
+            </ol>
           </section>
           <section className="destinations-section">
             <div className="section-heading">
@@ -378,7 +375,15 @@ export default function App() {
             })}
           </section>
         </div>
-        <aside className="results-panel">
+        <aside className="results-panel" id="resultados">
+          <input ref={configFileRef} accept="application/json,.json" className="hidden-file" type="file"
+            onChange={(event) => void importConfiguration(event.target.files?.[0])} />
+          <div className="report-actions" aria-label="Acciones del simulador">
+            <button type="button" onClick={exportConfiguration}>Descargar configuracion</button>
+            <button type="button" onClick={() => void downloadPdfReport()} disabled={!results}>Descargar reporte</button>
+            <button type="button" onClick={() => configFileRef.current?.click()}>Importar configuracion</button>
+          </div>
+          {importStatus && <p className="import-status" role="status">{importStatus}</p>}
           <div className="result-hero">
             <span>Flota recomendada</span>
             <strong>{results ? results.recommendedRobots : "—"}</strong>
@@ -412,7 +417,7 @@ export default function App() {
               </div>)}
             </section>
           </>}
-          <section className="summary"><h2>Resumen</h2><p>{executiveSummary}</p></section>
+          <section className="summary" id="resumen"><h2>Resumen</h2><p>{executiveSummary}</p></section>
           <p className="note">Estimacion preliminar. Validar rutas compartidas, picos de demanda y politica de carga en sitio.</p>
         </aside>
       </div>
